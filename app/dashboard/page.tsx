@@ -2,50 +2,58 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Package, ShoppingCart, TrendingUp, Users, AlertTriangle, DollarSign } from "lucide-react"
 
-export default function Dashboard() {
-  const stats = [
+async function getDashboardStats() {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/dashboard/stats`, {
+      cache: "no-store",
+    })
+    if (!response.ok) throw new Error("Failed to fetch stats")
+    return await response.json()
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error)
+    return {
+      productCount: 0,
+      orderCount: 0,
+      customerCount: 0,
+      revenue: 0,
+      lowStockItems: [],
+      recentOrders: [],
+    }
+  }
+}
+
+export default async function Dashboard() {
+  const stats = await getDashboardStats()
+
+  const statCards = [
     {
       title: "Total Products",
-      value: "1,234",
+      value: stats.productCount.toString(),
       change: "+12%",
       icon: Package,
       color: "text-blue-600",
     },
     {
       title: "Total Orders",
-      value: "856",
+      value: stats.orderCount.toString(),
       change: "+8%",
       icon: ShoppingCart,
       color: "text-green-600",
     },
     {
       title: "Revenue",
-      value: "$45,231",
+      value: `$${stats.revenue.toLocaleString()}`,
       change: "+23%",
       icon: DollarSign,
       color: "text-purple-600",
     },
     {
       title: "Customers",
-      value: "2,345",
+      value: stats.customerCount.toString(),
       change: "+15%",
       icon: Users,
       color: "text-orange-600",
     },
-  ]
-
-  const lowStockItems = [
-    { name: "Summer Dress - Blue", stock: 3, sku: "SD001" },
-    { name: "Denim Jacket - Black", stock: 1, sku: "DJ002" },
-    { name: "Cotton T-Shirt - White", stock: 5, sku: "CT003" },
-    { name: "Leather Boots - Brown", stock: 2, sku: "LB004" },
-  ]
-
-  const recentOrders = [
-    { id: "ORD001", customer: "Alice Johnson", amount: "$89.99", status: "Processing" },
-    { id: "ORD002", customer: "Bob Smith", amount: "$156.50", status: "Shipped" },
-    { id: "ORD003", customer: "Carol Davis", amount: "$234.00", status: "Delivered" },
-    { id: "ORD004", customer: "David Wilson", amount: "$67.25", status: "Processing" },
   ]
 
   return (
@@ -57,7 +65,7 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
+        {statCards.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
@@ -85,15 +93,19 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {lowStockItems.map((item) => (
-                <div key={item.sku} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="text-sm text-muted-foreground">SKU: {item.sku}</p>
+              {stats.lowStockItems.length > 0 ? (
+                stats.lowStockItems.map((item: any) => (
+                  <div key={item.sku} className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-sm text-muted-foreground">SKU: {item.sku}</p>
+                    </div>
+                    <Badge variant={item.stock <= 2 ? "destructive" : "secondary"}>{item.stock} left</Badge>
                   </div>
-                  <Badge variant={item.stock <= 2 ? "destructive" : "secondary"}>{item.stock} left</Badge>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">All items are well stocked</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -109,24 +121,32 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {recentOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{order.id}</p>
-                    <p className="text-sm text-muted-foreground">{order.customer}</p>
+              {stats.recentOrders.length > 0 ? (
+                stats.recentOrders.map((order: any) => (
+                  <div key={order.order_number} className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{order.order_number}</p>
+                      <p className="text-sm text-muted-foreground">{order.customer_name}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">${Number.parseFloat(order.total).toFixed(2)}</p>
+                      <Badge
+                        variant={
+                          order.status === "Delivered"
+                            ? "default"
+                            : order.status === "Shipped"
+                              ? "secondary"
+                              : "outline"
+                        }
+                      >
+                        {order.status}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium">{order.amount}</p>
-                    <Badge
-                      variant={
-                        order.status === "Delivered" ? "default" : order.status === "Shipped" ? "secondary" : "outline"
-                      }
-                    >
-                      {order.status}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">No recent orders</p>
+              )}
             </div>
           </CardContent>
         </Card>

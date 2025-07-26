@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -20,120 +20,157 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Search, Edit, Trash2, Eye } from "lucide-react"
 import Image from "next/image"
+import { useToast } from "@/hooks/use-toast"
 
 interface Product {
   id: string
   name: string
   description: string
   price: number
-  category: string
+  category_name: string
+  category_id: number
   sizes: string[]
   colors: string[]
   stock: number
   sku: string
-  status: "Active" | "Inactive" | "Out of Stock"
-  image: string
+  status: string
+  image_url?: string
+}
+
+interface Category {
+  id: number
+  name: string
 }
 
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
 
-  const [products, setProducts] = useState<Product[]>([
-    {
-      id: "1",
-      name: "Summer Floral Dress",
-      description: "Beautiful floral print dress perfect for summer occasions",
-      price: 89.99,
-      category: "Dresses",
-      sizes: ["XS", "S", "M", "L", "XL"],
-      colors: ["Blue", "Pink", "White"],
-      stock: 25,
-      sku: "SF001",
-      status: "Active",
-      image: "/placeholder.svg",
-    },
-    {
-      id: "2",
-      name: "Classic Denim Jacket",
-      description: "Timeless denim jacket with modern fit",
-      price: 79.99,
-      category: "Jackets",
-      sizes: ["S", "M", "L", "XL"],
-      colors: ["Blue", "Black", "Light Blue"],
-      stock: 15,
-      sku: "DJ002",
-      status: "Active",
-      image: "/placeholder.svg",
-    },
-    {
-      id: "3",
-      name: "Cotton Basic T-Shirt",
-      description: "Comfortable cotton t-shirt for everyday wear",
-      price: 24.99,
-      category: "Tops",
-      sizes: ["XS", "S", "M", "L", "XL", "XXL"],
-      colors: ["White", "Black", "Gray", "Navy"],
-      stock: 50,
-      sku: "CT003",
-      status: "Active",
-      image: "/placeholder.svg",
-    },
-    {
-      id: "4",
-      name: "Leather Ankle Boots",
-      description: "Premium leather boots with comfortable sole",
-      price: 149.99,
-      category: "Shoes",
-      sizes: ["6", "7", "8", "9", "10", "11"],
-      colors: ["Brown", "Black"],
-      stock: 8,
-      sku: "LB004",
-      status: "Active",
-      image: "/placeholder.svg",
-    },
-  ])
+  useEffect(() => {
+    fetchProducts()
+    fetchCategories()
+  }, [categoryFilter, searchTerm])
 
-  const categories = ["all", "Dresses", "Tops", "Bottoms", "Jackets", "Shoes", "Accessories"]
+  const fetchProducts = async () => {
+    try {
+      const params = new URLSearchParams()
+      if (categoryFilter !== "all") params.append("category", categoryFilter)
+      if (searchTerm) params.append("search", searchTerm)
 
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = categoryFilter === "all" || product.category === categoryFilter
-    return matchesSearch && matchesCategory
-  })
-
-  const handleAddProduct = (formData: FormData) => {
-    const newProduct: Product = {
-      id: Date.now().toString(),
-      name: formData.get("name") as string,
-      description: formData.get("description") as string,
-      price: Number.parseFloat(formData.get("price") as string),
-      category: formData.get("category") as string,
-      sizes: (formData.get("sizes") as string).split(",").map((s) => s.trim()),
-      colors: (formData.get("colors") as string).split(",").map((c) => c.trim()),
-      stock: Number.parseInt(formData.get("stock") as string),
-      sku: formData.get("sku") as string,
-      status: "Active",
-      image: "/placeholder.svg",
+      const response = await fetch(`/api/products?${params}`)
+      if (!response.ok) throw new Error("Failed to fetch products")
+      const data = await response.json()
+      setProducts(data)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch products",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
-    setProducts([...products, newProduct])
-    setIsAddDialogOpen(false)
   }
 
-  const handleDeleteProduct = (id: string) => {
-    setProducts(products.filter((p) => p.id !== id))
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch("/api/categories")
+      if (!response.ok) throw new Error("Failed to fetch categories")
+      const data = await response.json()
+      setCategories(data)
+    } catch (error) {
+      console.error("Error fetching categories:", error)
+    }
   }
 
-  const handleUpdateStock = (id: string, newStock: number) => {
-    setProducts(
-      products.map((p) =>
-        p.id === id ? { ...p, stock: newStock, status: newStock === 0 ? "Out of Stock" : "Active" } : p,
-      ),
-    )
+  const handleAddProduct = async (formData: FormData) => {
+    try {
+      const productData = {
+        name: formData.get("name") as string,
+        description: formData.get("description") as string,
+        price: Number.parseFloat(formData.get("price") as string),
+        category_id: Number.parseInt(formData.get("category") as string),
+        sizes: (formData.get("sizes") as string).split(",").map((s) => s.trim()),
+        colors: (formData.get("colors") as string).split(",").map((c) => c.trim()),
+        stock: Number.parseInt(formData.get("stock") as string),
+        sku: formData.get("sku") as string,
+        supplier: (formData.get("supplier") as string) || null,
+      }
+
+      const response = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(productData),
+      })
+
+      if (!response.ok) throw new Error("Failed to create product")
+
+      toast({
+        title: "Success",
+        description: "Product created successfully",
+      })
+
+      setIsAddDialogOpen(false)
+      fetchProducts()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create product",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleDeleteProduct = async (id: string) => {
+    try {
+      const response = await fetch(`/api/products/${id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) throw new Error("Failed to delete product")
+
+      toast({
+        title: "Success",
+        description: "Product deleted successfully",
+      })
+
+      fetchProducts()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete product",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleUpdateStock = async (id: string, newStock: number) => {
+    try {
+      const response = await fetch(`/api/products/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stock: newStock }),
+      })
+
+      if (!response.ok) throw new Error("Failed to update stock")
+
+      fetchProducts()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update stock",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-64">Loading...</div>
   }
 
   return (
@@ -187,9 +224,9 @@ export default function ProductsPage() {
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.slice(1).map((cat) => (
-                          <SelectItem key={cat} value={cat}>
-                            {cat}
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id.toString()}>
+                            {cat.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -205,6 +242,10 @@ export default function ProductsPage() {
                     <Label htmlFor="colors">Colors (comma-separated)</Label>
                     <Input id="colors" name="colors" placeholder="Red, Blue, Green" required />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="supplier">Supplier (optional)</Label>
+                  <Input id="supplier" name="supplier" />
                 </div>
               </div>
               <DialogFooter>
@@ -238,9 +279,10 @@ export default function ProductsPage() {
                 <SelectValue placeholder="Filter by category" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
                 {categories.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat === "all" ? "All Categories" : cat}
+                  <SelectItem key={cat.id} value={cat.name}>
+                    {cat.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -253,7 +295,7 @@ export default function ProductsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Product Catalog</CardTitle>
-          <CardDescription>{filteredProducts.length} products found</CardDescription>
+          <CardDescription>{products.length} products found</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -269,12 +311,12 @@ export default function ProductsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProducts.map((product) => (
+              {products.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Image
-                        src={product.image || "/placeholder.svg"}
+                        src={product.image_url || "/placeholder.svg?height=40&width=40"}
                         alt={product.name}
                         width={40}
                         height={40}
@@ -283,13 +325,13 @@ export default function ProductsPage() {
                       <div>
                         <p className="font-medium">{product.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {product.colors.join(", ")} • {product.sizes.join(", ")}
+                          {product.colors?.join(", ")} • {product.sizes?.join(", ")}
                         </p>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell className="font-mono">{product.sku}</TableCell>
-                  <TableCell>{product.category}</TableCell>
+                  <TableCell>{product.category_name}</TableCell>
                   <TableCell>${product.price.toFixed(2)}</TableCell>
                   <TableCell>
                     <Input
@@ -301,16 +343,8 @@ export default function ProductsPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        product.status === "Active"
-                          ? "default"
-                          : product.status === "Out of Stock"
-                            ? "destructive"
-                            : "secondary"
-                      }
-                    >
-                      {product.status}
+                    <Badge variant={product.stock > 0 ? "default" : "destructive"}>
+                      {product.stock > 0 ? "Active" : "Out of Stock"}
                     </Badge>
                   </TableCell>
                   <TableCell>
